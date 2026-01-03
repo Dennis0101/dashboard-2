@@ -57,6 +57,9 @@ build/
 **/android/.gradle/
 **/android/local.properties
 
+# expo web build output
+apps/mobile/dist/
+
 # infra / secrets
 .env.*
 !.env.example
