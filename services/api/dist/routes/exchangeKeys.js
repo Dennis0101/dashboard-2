@@ -1,6 +1,5 @@
 import { z } from "zod";
 import { withRlsUser } from "../db/client.js";
-import { parseDevSessionToken } from "../auth/devSession.js";
 import { encryptExchangeKeyPayload } from "../security/keyVault.js";
 import { maskApiKeyHint } from "../security/redact.js";
 const CreateBody = z.object({
@@ -10,22 +9,9 @@ const CreateBody = z.object({
     passphrase: z.string().optional()
 });
 export async function exchangeKeyRoutes(app) {
-    // Dev auth for now: "Bearer dev-session:<provider>:<subject>"
-    app.addHook("preHandler", async (req) => {
-        const auth = req.headers.authorization;
-        if (!auth?.startsWith("Bearer "))
-            throw app.httpErrors.unauthorized();
-        const token = auth.slice("Bearer ".length);
-        if (!token.startsWith("dev-session:"))
-            throw app.httpErrors.unauthorized();
-        // Keep parsing minimal here; real auth will issue signed JWT.
-        req.userId = parseDevSessionToken(token)?.userId;
-        if (!req.userId)
-            throw app.httpErrors.unauthorized();
-    });
     app.post("/v1/exchange-keys", async (req, reply) => {
         const body = CreateBody.parse(req.body);
-        const userId = req.userId;
+        const userId = req.auth.userId;
         const maskedHint = maskApiKeyHint(body.apiKey);
         const encrypted = encryptExchangeKeyPayload({ apiKey: body.apiKey, apiSecret: body.apiSecret, passphrase: body.passphrase }, app.config.KEY_VAULT_MASTER_KEY_B64);
         // Store encrypted; NEVER return plaintext.
@@ -43,7 +29,7 @@ export async function exchangeKeyRoutes(app) {
         });
     });
     app.get("/v1/exchange-keys", async (req) => {
-        const userId = req.userId;
+        const userId = req.auth.userId;
         const rows = await withRlsUser(userId, async (tx) => {
             return await tx `
         select id, exchange, masked_hint, created_at, revoked_at

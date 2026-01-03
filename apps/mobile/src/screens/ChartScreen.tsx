@@ -1,8 +1,9 @@
-import React, { useMemo, useState } from "react";
+import React, { useEffect, useMemo, useRef, useState } from "react";
 import { Pressable, ScrollView, StyleSheet, Text, View } from "react-native";
 import { WebView } from "react-native-webview";
 import { useTheme } from "../app/theme";
 import { H1, P, Panel, Screen } from "../ui/Primitives";
+import { apiGet } from "../api/client";
 
 const TIMEFRAMES = ["5s", "15s", "1m", "5m", "1h", "1d", "1w", "1y"] as const;
 type Timeframe = (typeof TIMEFRAMES)[number];
@@ -11,6 +12,30 @@ export function ChartScreen() {
   const { colors } = useTheme();
   const [tf, setTf] = useState<Timeframe>("1m");
   const [type, setType] = useState<"candles" | "heikin" | "bars">("candles");
+  const webRef = useRef<WebView>(null);
+
+  type TradeEvent = {
+    id: string;
+    type: "ENTRY" | "EXIT" | "REJECT" | "HALT" | "INFO";
+    side: "LONG" | "SHORT" | null;
+    price: number | null;
+    pnl: number | null;
+    createdAt: string;
+    reasonDetail: string | null;
+  };
+
+  const [events, setEvents] = useState<TradeEvent[]>([]);
+
+  useEffect(() => {
+    (async () => {
+      try {
+        const res = await apiGet<TradeEvent[]>(`/v1/trades/events?symbol=BTCUSDT&timeframe=${encodeURIComponent(tf)}`);
+        setEvents(res);
+      } catch {
+        setEvents([]);
+      }
+    })();
+  }, [tf]);
 
   const html = useMemo(() => {
     // TradingView Lightweight Charts를 WebView로 띄우는 최소 골격.
@@ -28,7 +53,7 @@ export function ChartScreen() {
   </head>
   <body>
     <div id="c"></div>
-    <div class="hint">Chart type: ${type} • TF: ${tf} • markers: placeholder</div>
+    <div class="hint">Chart type: ${type} • TF: ${tf} • markers: server-driven</div>
     <script>
       const chart = LightweightCharts.createChart(document.getElementById('c'), {
         layout: { background: { type: 'solid', color: '${colors.bg}' }, textColor: '${colors.subtext}' },
@@ -45,11 +70,44 @@ export function ChartScreen() {
         { time: 1710000120, open: 108, high: 115, low: 107, close: 111 },
         { time: 1710000180, open: 111, high: 113, low: 104, close: 106 },
       ]);
+
+      function setTradeMarkers(events) {
+        const markers = (events || [])
+          .filter(e => e.price != null)
+          .map(e => {
+            const t = Math.floor(new Date(e.createdAt).getTime() / 1000);
+            const isEntry = e.type === 'ENTRY';
+            const isExit = e.type === 'EXIT';
+            const side = e.side || '';
+            const text = isEntry
+              ? (side + ' entry')
+              : isExit
+                ? ('exit ' + (e.pnl != null ? ('pnl=' + e.pnl) : ''))
+                : e.type;
+            return {
+              time: t,
+              position: isEntry ? 'belowBar' : 'aboveBar',
+              shape: isEntry ? 'arrowUp' : 'arrowDown',
+              color: isEntry ? '${colors.success}' : '${colors.danger}',
+              text
+            };
+          });
+        series.setMarkers(markers);
+      }
+
+      window.__setTradeMarkers = setTradeMarkers;
       chart.timeScale().fitContent();
     </script>
   </body>
 </html>`;
   }, [colors.bg, colors.border, colors.subtext, tf, type]);
+
+  useEffect(() => {
+    // Push markers into WebView after it loads.
+    const payload = JSON.stringify(events);
+    const js = `window.__setTradeMarkers && window.__setTradeMarkers(${payload}); true;`;
+    webRef.current?.injectJavaScript(js);
+  }, [events]);
 
   return (
     <Screen>
@@ -69,7 +127,7 @@ export function ChartScreen() {
         </ScrollView>
 
         <View style={{ height: 380, marginTop: 10, borderRadius: 14, overflow: "hidden", borderWidth: 1, borderColor: colors.border }}>
-          <WebView originWhitelist={["*"]} source={{ html }} />
+          <WebView ref={webRef} originWhitelist={["*"]} source={{ html }} />
         </View>
       </Panel>
     </Screen>

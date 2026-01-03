@@ -8,6 +8,8 @@ import { redactObject } from "./security/redact.js";
 import { healthRoutes } from "./routes/health.js";
 import { authRoutes } from "./routes/auth.js";
 import { exchangeKeyRoutes } from "./routes/exchangeKeys.js";
+import { authPlugin } from "./auth/authPlugin.js";
+import { tradeRoutes } from "./routes/trades.js";
 const config = loadConfig(process.env);
 export async function buildServer() {
     const app = Fastify({
@@ -29,9 +31,11 @@ export async function buildServer() {
     await app.register(helmet, { global: true });
     await app.register(cors, { origin: true, credentials: true });
     await app.register(rateLimit, { max: 300, timeWindow: "1 minute" });
+    await app.register(authPlugin);
     await app.register(healthRoutes);
     await app.register(authRoutes);
     await app.register(exchangeKeyRoutes);
+    await app.register(tradeRoutes);
     app.setErrorHandler((err, _req, reply) => {
         // Never leak sensitive payloads.
         const e = err instanceof Error ? err : new Error("unknown_error");
