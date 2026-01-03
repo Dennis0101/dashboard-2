@@ -17,6 +17,7 @@ export function SettingsScreen() {
   const [exchange, setExchange] = useState("binance");
   const [apiKey, setApiKey] = useState("");
   const [apiSecret, setApiSecret] = useState("");
+  const [passphrase, setPassphrase] = useState("");
   const [keys, setKeys] = useState<StoredKey[]>([]);
 
   async function refresh() {
@@ -91,6 +92,25 @@ export function SettingsScreen() {
           />
         </View>
 
+        <View style={{ marginTop: 12 }}>
+          <P>Passphrase (Bitget 필수, Bybit는 보통 불필요)</P>
+          <TextInput
+            value={passphrase}
+            onChangeText={setPassphrase}
+            autoCapitalize="none"
+            secureTextEntry
+            style={{
+              marginTop: 8,
+              padding: 12,
+              borderRadius: 12,
+              borderWidth: 1,
+              borderColor: colors.border,
+              color: colors.text
+            }}
+            placeholderTextColor={colors.subtext}
+          />
+        </View>
+
         <Button
           label="Save API Key (server)"
           onPress={async () => {
@@ -101,10 +121,11 @@ export function SettingsScreen() {
               }
               const res = await apiPost<{ id: string; exchange: string; maskedHint: string }>(
                 "/v1/exchange-keys",
-                { exchange, apiKey, apiSecret }
+                { exchange, apiKey, apiSecret, passphrase: passphrase || undefined }
               );
               setApiKey("");
               setApiSecret("");
+              setPassphrase("");
               Alert.alert("Saved", `${res.exchange} • ${res.maskedHint}\n(원문 키는 다시 볼 수 없습니다)`);
               await refresh();
             } catch (e) {

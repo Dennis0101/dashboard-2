@@ -3,6 +3,7 @@ import pino from "pino";
 import { decryptExchangeKeyPayload } from "./security/keyVault.js";
 import { checkRisk, RiskLimitsSchema } from "./risk/limits.js";
 import { NoopLockProvider } from "./locks/lock.js";
+import { assertSupportedExchange, makeExchangeClient } from "./exchanges/router.js";
 const log = pino({ level: process.env.NODE_ENV === "production" ? "info" : "debug" });
 const DATABASE_URL = process.env.DATABASE_URL;
 const MASTER_KEY = process.env.KEY_VAULT_MASTER_KEY_B64;
@@ -59,10 +60,30 @@ async function main() {
             return;
         }
         const payload = decryptExchangeKeyPayload(row.encrypted_payload, MASTER_KEY);
+        const ex = String(row.exchange).toLowerCase();
+        assertSupportedExchange(ex);
+        const client = makeExchangeClient(ex, payload);
         // CRITICAL: never log payload.apiKey/apiSecret.
         log.info({ msg: "decrypted_key_ready_in_memory", exchange: row.exchange, keyId: row.id });
-        // Placeholder: execute order here using payload (in memory only)
-        // ... placeOrder(payload) ...
+        // Safety gate: verify API key permissions BEFORE any trading.
+        // If the exchange cannot confirm withdrawals are disabled, we HALT.
+        try {
+            const info = await client.getApiKeyInfo?.();
+            // NOTE: Parsing differs per exchange; we intentionally treat unknown as unsafe.
+            if (!info)
+                throw new Error("api_key_permission_unknown");
+            // Bybit typically includes "isWithdraw" / "readOnly" style flags; Bitget will be implemented.
+        }
+        catch (e) {
+            const msg = e instanceof Error ? e.message : "unknown";
+            await tx `
+        insert into trade_events (user_id, symbol, timeframe, event_type, reason_code, reason_detail)
+        values (${userId}::uuid, 'BTCUSDT', '1m', 'HALT', 'api_key_permission_check_failed', ${msg})
+      `;
+            log.warn({ msg: "halted_by_key_permissions", reason: msg, exchange: row.exchange });
+            return;
+        }
+        // Next step: account/position snapshot -> idempotent order execution -> record trade_id + events.
     });
     await lockProvider.release(lock);
 }
