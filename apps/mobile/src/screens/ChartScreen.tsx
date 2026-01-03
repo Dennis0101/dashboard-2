@@ -25,14 +25,18 @@ export function ChartScreen() {
   };
 
   const [events, setEvents] = useState<TradeEvent[]>([]);
+  const [trades, setTrades] = useState<any[]>([]);
 
   useEffect(() => {
     (async () => {
       try {
         const res = await apiGet<TradeEvent[]>(`/v1/trades/events?symbol=BTCUSDT&timeframe=${encodeURIComponent(tf)}`);
         setEvents(res);
+        const t = await apiGet<any[]>(`/v1/trades?symbol=BTCUSDT&timeframe=${encodeURIComponent(tf)}&limit=50`);
+        setTrades(t);
       } catch {
         setEvents([]);
+        setTrades([]);
       }
     })();
   }, [tf]);
@@ -95,7 +99,20 @@ export function ChartScreen() {
         series.setMarkers(markers);
       }
 
+      function setTradeLines(trades) {
+        // lightweight-charts doesn't support multi-segment overlays easily without many series.
+        // For now: draw the most recent CLOSED trade as a 2-point line (entry->exit) as a proof baseline.
+        const closed = (trades || []).find(t => t.status === 'CLOSED' && t.entry && t.exit);
+        if (!closed) return;
+        const line = chart.addLineSeries({ color: (closed.pnl && closed.pnl.net >= 0) ? '${colors.success}' : '${colors.danger}', lineWidth: 2 });
+        line.setData([
+          { time: Math.floor(new Date(closed.entry.ts).getTime() / 1000), value: closed.entry.price },
+          { time: Math.floor(new Date(closed.exit.ts).getTime() / 1000), value: closed.exit.price },
+        ]);
+      }
+
       window.__setTradeMarkers = setTradeMarkers;
+      window.__setTradeLines = setTradeLines;
       chart.timeScale().fitContent();
     </script>
   </body>
@@ -108,6 +125,12 @@ export function ChartScreen() {
     const js = `window.__setTradeMarkers && window.__setTradeMarkers(${payload}); true;`;
     webRef.current?.injectJavaScript(js);
   }, [events]);
+
+  useEffect(() => {
+    const payload = JSON.stringify(trades);
+    const js = `window.__setTradeLines && window.__setTradeLines(${payload}); true;`;
+    webRef.current?.injectJavaScript(js);
+  }, [trades]);
 
   return (
     <Screen>

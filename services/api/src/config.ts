@@ -7,6 +7,7 @@ const EnvSchema = z.object({
 
   // JWT (HS256) for app session tokens (production MUST set)
   JWT_SECRET: z.string().min(16).optional(),
+  REFRESH_TOKEN_PEPPER: z.string().min(16).optional(),
 
   // 32-byte key, base64 encoded (AES-256-GCM)
   KEY_VAULT_MASTER_KEY_B64: z.string().min(1).optional(),

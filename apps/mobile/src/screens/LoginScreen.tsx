@@ -1,7 +1,7 @@
 import React, { useState } from "react";
 import { Alert, TextInput, View } from "react-native";
 import { apiPost } from "../api/client";
-import { setSessionToken } from "../state/session";
+import { setRefreshToken, setSessionToken } from "../state/session";
 import { Button, H1, P, Panel, Screen } from "../ui/Primitives";
 import { useTheme } from "../app/theme";
 
@@ -41,11 +41,13 @@ export function LoginScreen({ onLoggedIn }: { onLoggedIn: () => void }) {
           label="Continue (dev)"
           onPress={async () => {
             try {
-              const res = await apiPost<{ sessionToken: string }>("/auth/login", {
+              const res = await apiPost<{ sessionToken: string; refreshToken: string }>("/auth/login", {
                 provider: "google",
-                idToken: `dev:${devSubject}`
+                idToken: `dev:${devSubject}`,
+                deviceId: "expo-dev"
               });
               await setSessionToken(res.sessionToken);
+              await setRefreshToken(res.refreshToken);
               onLoggedIn();
             } catch (e) {
               Alert.alert("Login failed", e instanceof Error ? e.message : "unknown_error");

@@ -16,3 +16,10 @@ export function assertTimeframeAllowed(tier: SubscriptionTier, timeframe: string
   }
 }
 
+export function aiStrengthForTier(tier: SubscriptionTier): { mode: "conservative" | "balanced" | "aggressive"; minConfidence: number } {
+  // Higher tiers may allow lower confidence thresholds (still bounded by risk/fail-safe rules).
+  if (tier === "basic") return { mode: "conservative", minConfidence: 0.8 };
+  if (tier === "pro") return { mode: "balanced", minConfidence: 0.7 };
+  return { mode: "aggressive", minConfidence: 0.6 };
+}
+

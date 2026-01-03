@@ -7,7 +7,100 @@ const EventsQuery = z.object({
     from: z.coerce.number().int().optional(), // unix seconds
     to: z.coerce.number().int().optional() // unix seconds
 });
+const TradesQuery = z.object({
+    symbol: z.string().min(1).optional(),
+    timeframe: z.string().min(1).optional(),
+    limit: z.coerce.number().int().min(1).max(500).default(100)
+});
 export async function tradeRoutes(app) {
+    // v1: list trades (grouped proof)
+    app.get("/v1/trades", async (req) => {
+        const q = TradesQuery.parse(req.query);
+        const { userId, tier } = req.auth;
+        if (q.timeframe)
+            assertTimeframeAllowed(tier, q.timeframe);
+        const rows = await withRlsUser(userId, async (tx) => {
+            if (q.symbol && q.timeframe) {
+                return await tx `
+          select id, symbol, timeframe, side, status,
+                 entry_ts, entry_price, exit_ts, exit_price,
+                 qty, realized_pnl, fees, funding, net_pnl,
+                 entry_reason_detail, exit_reason_detail,
+                 created_at, updated_at
+          from trades
+          where symbol = ${q.symbol}
+            and timeframe = ${q.timeframe}
+          order by created_at desc
+          limit ${q.limit}
+        `;
+            }
+            if (q.symbol) {
+                return await tx `
+          select id, symbol, timeframe, side, status,
+                 entry_ts, entry_price, exit_ts, exit_price,
+                 qty, realized_pnl, fees, funding, net_pnl,
+                 entry_reason_detail, exit_reason_detail,
+                 created_at, updated_at
+          from trades
+          where symbol = ${q.symbol}
+          order by created_at desc
+          limit ${q.limit}
+        `;
+            }
+            return await tx `
+        select id, symbol, timeframe, side, status,
+               entry_ts, entry_price, exit_ts, exit_price,
+               qty, realized_pnl, fees, funding, net_pnl,
+               entry_reason_detail, exit_reason_detail,
+               created_at, updated_at
+        from trades
+        order by created_at desc
+        limit ${q.limit}
+      `;
+        });
+        const typed = rows;
+        return typed.map((t) => ({
+            id: t.id,
+            symbol: t.symbol,
+            timeframe: t.timeframe,
+            side: t.side,
+            status: t.status,
+            entry: t.entry_ts
+                ? { ts: t.entry_ts, price: t.entry_price ? Number(t.entry_price) : null }
+                : null,
+            exit: t.exit_ts
+                ? { ts: t.exit_ts, price: t.exit_price ? Number(t.exit_price) : null }
+                : null,
+            qty: t.qty ? Number(t.qty) : null,
+            pnl: {
+                realized: t.realized_pnl ? Number(t.realized_pnl) : null,
+                fees: t.fees ? Number(t.fees) : null,
+                funding: t.funding ? Number(t.funding) : null,
+                net: t.net_pnl ? Number(t.net_pnl) : null
+            },
+            entryReason: t.entry_reason_detail,
+            exitReason: t.exit_reason_detail,
+            createdAt: t.created_at,
+            updatedAt: t.updated_at
+        }));
+    });
+    // v1: trade detail (+ underlying events) for full transparency
+    app.get("/v1/trades/:tradeId", async (req) => {
+        const { tradeId } = z.object({ tradeId: z.string().uuid() }).parse(req.params);
+        const { userId } = req.auth;
+        const result = await withRlsUser(userId, async (tx) => {
+            const tradeRows = await tx `select * from trades where id = ${tradeId}::uuid limit 1`;
+            const eventRows = await tx `
+        select id, event_type, side, price, qty, pnl, reason_code, reason_detail, exchange_ts, created_at
+        from trade_events
+        where trade_id = ${tradeId}::uuid
+        order by created_at asc
+        limit 2000
+      `;
+            return { trade: tradeRows[0] ?? null, events: eventRows };
+        });
+        return result;
+    });
     app.get("/v1/trades/events", async (req) => {
         const { symbol, timeframe, from, to } = EventsQuery.parse(req.query);
         const { userId, tier } = req.auth;

@@ -12,3 +12,11 @@ export function assertTimeframeAllowed(tier, timeframe) {
         throw new Error("timeframe_not_allowed_for_tier");
     }
 }
+export function aiStrengthForTier(tier) {
+    // Higher tiers may allow lower confidence thresholds (still bounded by risk/fail-safe rules).
+    if (tier === "basic")
+        return { mode: "conservative", minConfidence: 0.8 };
+    if (tier === "pro")
+        return { mode: "balanced", minConfidence: 0.7 };
+    return { mode: "aggressive", minConfidence: 0.6 };
+}

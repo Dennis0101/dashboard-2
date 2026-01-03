@@ -2,6 +2,8 @@ import React from "react";
 import { View } from "react-native";
 import { Button, H1, P, Panel, Screen } from "../ui/Primitives";
 import { clearSessionToken } from "../state/session";
+import { apiPost } from "../api/client";
+import { getRefreshToken } from "../state/session";
 
 export function DashboardScreen({ onLogout }: { onLogout: () => void }) {
   return (
@@ -21,6 +23,12 @@ export function DashboardScreen({ onLogout }: { onLogout: () => void }) {
         variant="secondary"
         label="Logout"
         onPress={async () => {
+          try {
+            const rt = await getRefreshToken();
+            if (rt) await apiPost("/auth/logout", { refreshToken: rt });
+          } catch {
+            // ignore network failures; still clear local tokens
+          }
           await clearSessionToken();
           onLogout();
         }}
