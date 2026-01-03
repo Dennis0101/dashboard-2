@@ -1,0 +1,15 @@
+{
+  "name": "ai-trading-monorepo",
+  "private": true,
+  "workspaces": [
+    "apps/*",
+    "services/*"
+  ],
+  "scripts": {
+    "replit": "bash scripts/replit_start.sh",
+    "mobile:web:build": "npm --prefix apps/mobile run web:build",
+    "mobile:web:serve": "node scripts/serve_mobile_web.mjs"
+  },
+  "dependencies": {}
+}
+
