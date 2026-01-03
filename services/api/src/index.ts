@@ -10,6 +10,7 @@ import { authRoutes } from "./routes/auth.js";
 import { exchangeKeyRoutes } from "./routes/exchangeKeys.js";
 import { authPlugin } from "./auth/authPlugin.js";
 import { tradeRoutes } from "./routes/trades.js";
+import { statusRoutes } from "./routes/status.js";
 
 declare module "fastify" {
   interface FastifyInstance {
@@ -48,6 +49,7 @@ export async function buildServer() {
   await app.register(authRoutes);
   await app.register(exchangeKeyRoutes);
   await app.register(tradeRoutes);
+  await app.register(statusRoutes);
 
   app.setErrorHandler((err, _req, reply) => {
     // Never leak sensitive payloads.

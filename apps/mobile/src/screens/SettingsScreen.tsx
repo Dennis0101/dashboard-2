@@ -14,7 +14,7 @@ type StoredKey = {
 
 export function SettingsScreen() {
   const { colors } = useTheme();
-  const [exchange, setExchange] = useState("binance");
+  const [exchange, setExchange] = useState("bybit");
   const [apiKey, setApiKey] = useState("");
   const [apiSecret, setApiSecret] = useState("");
   const [passphrase, setPassphrase] = useState("");

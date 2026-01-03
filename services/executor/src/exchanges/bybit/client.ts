@@ -56,6 +56,20 @@ export class BybitClient {
     return await this.request("GET", "/v5/user/query-api", {});
   }
 
+  async verifySafety(): Promise<{ ok: true } | { ok: false; reason: string; detail?: string }> {
+    const info = await this.getApiKeyInfo();
+    const { requireExplicitWithdrawalDisabled, findBooleanFlags } = await import("../common/permissions.js");
+
+    // Withdrawal must be explicitly disabled.
+    const wd = requireExplicitWithdrawalDisabled(info);
+    if (!wd.ok) return wd;
+
+    // Also ensure API key is not read-only (must be able to trade).
+    const ro = findBooleanFlags(info, ["readOnly", "readonly", "isReadOnly"]);
+    if (ro.trues.length > 0) return { ok: false, reason: "api_key_read_only" };
+    return { ok: true };
+  }
+
   // --- Futures (linear) ---
   async getWalletBalance(coin = "USDT"): Promise<any> {
     return await this.request("GET", "/v5/account/wallet-balance", { accountType: "UNIFIED", coin });

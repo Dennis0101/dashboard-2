@@ -66,21 +66,24 @@ async function main() {
         // CRITICAL: never log payload.apiKey/apiSecret.
         log.info({ msg: "decrypted_key_ready_in_memory", exchange: row.exchange, keyId: row.id });
         // Safety gate: verify API key permissions BEFORE any trading.
-        // If the exchange cannot confirm withdrawals are disabled, we HALT.
-        try {
-            const info = await client.getApiKeyInfo?.();
-            // NOTE: Parsing differs per exchange; we intentionally treat unknown as unsafe.
-            if (!info)
-                throw new Error("api_key_permission_unknown");
-            // Bybit typically includes "isWithdraw" / "readOnly" style flags; Bitget will be implemented.
-        }
-        catch (e) {
-            const msg = e instanceof Error ? e.message : "unknown";
+        // If we cannot *explicitly* confirm withdrawals are disabled, we HALT (fail-safe).
+        const verifier = client
+            .verifySafety;
+        if (!verifier) {
             await tx `
         insert into trade_events (user_id, symbol, timeframe, event_type, reason_code, reason_detail)
-        values (${userId}::uuid, 'BTCUSDT', '1m', 'HALT', 'api_key_permission_check_failed', ${msg})
+        values (${userId}::uuid, 'BTCUSDT', '1m', 'HALT', 'api_key_permission_check_missing', 'Exchange adapter missing verifySafety()')
       `;
-            log.warn({ msg: "halted_by_key_permissions", reason: msg, exchange: row.exchange });
+            log.warn({ msg: "halted_by_key_permissions", reason: "missing_verifier", exchange: row.exchange });
+            return;
+        }
+        const check = await verifier();
+        if (!check.ok) {
+            await tx `
+        insert into trade_events (user_id, symbol, timeframe, event_type, reason_code, reason_detail)
+        values (${userId}::uuid, 'BTCUSDT', '1m', 'HALT', ${check.reason}, ${check.detail ?? check.reason})
+      `;
+            log.warn({ msg: "halted_by_key_permissions", reason: check.reason, exchange: row.exchange });
             return;
         }
         // Next step: account/position snapshot -> idempotent order execution -> record trade_id + events.

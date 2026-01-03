@@ -1,11 +1,25 @@
-import React from "react";
+import React, { useEffect, useState } from "react";
 import { View } from "react-native";
 import { Button, H1, P, Panel, Screen } from "../ui/Primitives";
 import { clearSessionToken } from "../state/session";
 import { apiPost } from "../api/client";
 import { getRefreshToken } from "../state/session";
+import { apiGet } from "../api/client";
 
 export function DashboardScreen({ onLogout }: { onLogout: () => void }) {
+  const [status, setStatus] = useState<any | null>(null);
+
+  useEffect(() => {
+    (async () => {
+      try {
+        const res = await apiGet<any>("/v1/status");
+        setStatus(res);
+      } catch {
+        setStatus(null);
+      }
+    })();
+  }, []);
+
   return (
     <Screen>
       <H1>Dashboard</H1>
@@ -14,8 +28,24 @@ export function DashboardScreen({ onLogout }: { onLogout: () => void }) {
       <View style={{ marginTop: 12 }}>
         <Panel>
           <H1 style={{ fontSize: 16 } as any}>Bot Status</H1>
-          <P>현재: Idle (서버 상태 연결 예정)</P>
-          <P>불확실 상태 감지 시: 자동매매 중단</P>
+          {status ? (
+            <>
+              <P>tier: {status.tier}</P>
+              <P>autoTrading: {status.autoTrading}</P>
+              {status.lastEvent ? (
+                <P>
+                  last: {status.lastEvent.type} • {status.lastEvent.reasonCode ?? "-"} • {status.lastEvent.reasonDetail ?? "-"}
+                </P>
+              ) : (
+                <P>last: -</P>
+              )}
+            </>
+          ) : (
+            <>
+              <P>현재: Unknown (서버 미연결)</P>
+              <P>불확실 상태 감지 시: 자동매매 중단</P>
+            </>
+          )}
         </Panel>
       </View>
 

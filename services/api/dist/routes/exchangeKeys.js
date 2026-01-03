@@ -3,7 +3,7 @@ import { withRlsUser } from "../db/client.js";
 import { encryptExchangeKeyPayload } from "../security/keyVault.js";
 import { maskApiKeyHint } from "../security/redact.js";
 const CreateBody = z.object({
-    exchange: z.string().min(1),
+    exchange: z.enum(["bybit", "bitget"]),
     apiKey: z.string().min(1),
     apiSecret: z.string().min(1),
     passphrase: z.string().optional()
@@ -12,6 +12,9 @@ export async function exchangeKeyRoutes(app) {
     app.post("/v1/exchange-keys", async (req, reply) => {
         const body = CreateBody.parse(req.body);
         const userId = req.auth.userId;
+        if (body.exchange === "bitget" && !body.passphrase) {
+            throw app.httpErrors.badRequest("bitget_passphrase_required");
+        }
         const maskedHint = maskApiKeyHint(body.apiKey);
         const encrypted = encryptExchangeKeyPayload({ apiKey: body.apiKey, apiSecret: body.apiSecret, passphrase: body.passphrase }, app.config.KEY_VAULT_MASTER_KEY_B64);
         // Store encrypted; NEVER return plaintext.

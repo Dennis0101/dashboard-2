@@ -49,11 +49,31 @@ export class BitgetClient {
 
   // --- Safety checks ---
   async getApiKeyInfo(): Promise<any> {
-    // Bitget endpoint differs by API version/account type.
-    // This is intentionally a placeholder call site; we will wire the exact endpoint
-    // and enforce: withdrawal permission must be OFF, otherwise HALT.
-    // TODO: implement with Bitget official "get api key info/permissions" endpoint.
-    throw new Error("bitget_api_key_permission_check_not_implemented");
+    // Bitget endpoint can vary by API version. We try common candidates.
+    const candidates = [
+      "/api/v2/spot/account/getApiKeyInfo",
+      "/api/spot/v1/account/getApikeyInfo",
+      "/api/v2/user/query-api" // some deployments mirror naming; safe fallback
+    ];
+
+    let lastErr: unknown = null;
+    for (const path of candidates) {
+      try {
+        // signed GET; no params
+        return await this.request("GET", path, {});
+      } catch (e) {
+        lastErr = e;
+      }
+    }
+    throw lastErr instanceof Error ? lastErr : new Error("bitget_api_key_permission_check_failed");
+  }
+
+  async verifySafety(): Promise<{ ok: true } | { ok: false; reason: string; detail?: string }> {
+    const info = await this.getApiKeyInfo();
+    const { requireExplicitWithdrawalDisabled } = await import("../common/permissions.js");
+    const wd = requireExplicitWithdrawalDisabled(info);
+    if (!wd.ok) return wd;
+    return { ok: true };
   }
 
   // --- Futures (USDT-M) ---
